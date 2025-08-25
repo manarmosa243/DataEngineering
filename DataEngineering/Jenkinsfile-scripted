@@ -1,0 +1,54 @@
+@Library('my-sharedlib') _
+
+node {
+    // Define parameters
+    properties([
+        parameters([
+            string(name: 'IMAGE_TAG', defaultValue: 'build-1', description: 'Docker image tag')
+        ])
+    ])
+
+    // Environment variables
+    def DOCKER_IMAGE = "manarmosa/java-app:${params.IMAGE_TAG}"
+
+    try {
+        stage('Build') {
+            parallel(
+                "Build JAR": {
+                    dir('DataEngineering') {
+                        sh 'mvn clean package -DskipTests'
+                    }
+                },
+                "Run Bounds SharedLib": {
+                    script {
+                        bounds(1, 100)  // Call function from shared library
+                    }
+                }
+            )
+        }
+
+        stage('Build Docker Image') {
+            dir('DataEngineering') {
+                sh "docker build -t ${DOCKER_IMAGE} ."
+            }
+        }
+
+        stage('Login to Docker Hub') {
+            withCredentials([usernamePassword(credentialsId: 'dockerHub', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                sh "echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin"
+            }
+        }
+
+        stage('Push Docker Image') {
+            sh "docker push ${DOCKER_IMAGE}"
+        }
+    }
+    finally {
+        stage('Post Actions') {
+            dir('DataEngineering') {
+                sh 'mvn clean'
+            }
+            sh 'docker system prune -f'
+        }
+    }
+}
