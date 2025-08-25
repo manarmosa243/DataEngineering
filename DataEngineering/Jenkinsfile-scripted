@@ -1,55 +1,41 @@
-@Library('my-sharedlib') _
+@Library('my-sharedlib@master') _
 
 node {
-    // Define parameters
-    properties([
-        parameters([
-            string(name: 'IMAGE_TAG', defaultValue: 'build-1', description: 'Docker image tag')
-        ])
-    ])
+  properties([parameters([
+    string(name: 'REGISTRY', defaultValue: 'docker.io'),
+    string(name: 'REGISTRY_NS', defaultValue: 'manarmosa'),   // your DockerHub username
+    string(name: 'IMAGE_NAME', defaultValue: 'dataengineering-app'), // your image name
+    string(name: 'IMAGE_TAG', defaultValue: "build-${env.BUILD_NUMBER}")
+  ])])
 
-    // Environment variables
-    def DOCKER_IMAGE = "manarmosa/java-app:${params.IMAGE_TAG}"
+  env.IMAGE_REF = "${params.REGISTRY}/${params.REGISTRY_NS}/${params.IMAGE_NAME}:${params.IMAGE_TAG}"
 
-    try {
-        stage('Build') {
-            parallel(
-                "Build JAR": {
-                    dir('DataEngineering/DataEngineering') {
-                        sh 'mvn clean package -DskipTests'
-                    }
+  stage('Checkout') {
+    checkout([$class: 'GitSCM', branches: [[name: "*/master"]],
+      userRemoteConfigs: [[url: "https://github.com/ManarMosa/DataEngineering.git"]]])
+  }
 
-                },
-                "Run Bounds SharedLib": {
-                    script {
-                        bounds(1, 100)  // Call function from shared library
-                    }
-                }
-            )
-        }
-
-        stage('Build Docker Image') {
-            dir('DataEngineering/DataEngineering') {
-                sh "docker build -t ${DOCKER_IMAGE} ."
-            }
-        }
-
-        stage('Login to Docker Hub') {
-            withCredentials([usernamePassword(credentialsId: 'dockerHub', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                sh "echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin"
-            }
-        }
-
-        stage('Push Docker Image') {
-            sh "docker push ${DOCKER_IMAGE}"
-        }
+  stage('Build & Test (parallel)') {
+    dir('DataEngineering') {
+      parallel(
+        "Test": { sh 'if [ -x ./mvnw ]; then ./mvnw -B test; else mvn -B test; fi' },
+        "Compile": { sh 'if [ -x ./mvnw ]; then ./mvnw -B -DskipTests=true package; else mvn -B -DskipTests=true package; fi' }
+      )
+      archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
     }
-    finally {
-        stage('Post Actions') {
-            dir('DataEngineering/DataEngineering') {
-                sh 'mvn clean'
-            }
-            sh 'docker system prune -f'
-        }
+  }
+
+  stage('Docker Build') {
+    dir('DataEngineering') {
+      dockerUtils.buildImage(".", env.IMAGE_REF)
     }
+  }
+
+  stage('Docker Login & Push') {
+    withDockerRegistry(url: "https://${params.REGISTRY}", credentialsId: 'dockerHub') {
+      dockerUtils.pushImage(env.IMAGE_REF)
+    }
+  }
+
+  stage('Cleanup') { deleteDir() }
 }
