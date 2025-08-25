@@ -41,11 +41,12 @@ node {
     }
   }
 
-  stage('Login to Docker Hub & Push') {
-    withDockerRegistry(url: "https://${params.REGISTRY}", credentialsId: 'dockerHub') {
-      dockerUtils.pushImage(env.IMAGE_REF)
-    }
+  stage('Docker Login & Push') {
+  withDockerRegistry(url: "https://index.docker.io/v1/", credentialsId: 'dockerHub') {
+    dockerUtils.pushImage(env.IMAGE_REF)
   }
+}
+
 
   stage('Cleanup Workspace') {
     deleteDir()
