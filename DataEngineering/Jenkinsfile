@@ -17,7 +17,7 @@ pipeline {
             parallel {
                 stage('Build JAR') {
                     steps {
-                        dir('dataengineering') {
+                        dir('DataEngineering') {
                         sh 'mvn clean package -DskipTests'
                     }
                 }
@@ -35,7 +35,7 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                dir('dataengineering') {
+                dir('DataEngineering') {
                 sh "docker build -t ${DOCKER_IMAGE} ."
             }
             }
@@ -56,7 +56,7 @@ pipeline {
 
     post {
         always {
-            dir('dataengineering') {
+            dir('DataEngineering') {
             sh 'mvn clean'
         }
             sh 'docker system prune -f'
