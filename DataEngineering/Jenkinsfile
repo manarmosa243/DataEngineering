@@ -17,9 +17,12 @@ pipeline {
             parallel {
                 stage('Build JAR') {
                     steps {
+                        dir('dataengineering') {
                         sh 'mvn clean package -DskipTests'
                     }
                 }
+            }
+
                 stage('Run Bounds SharedLib') {
                     steps {
                         script {
@@ -32,7 +35,9 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
+                dir('dataengineering') {
                 sh "docker build -t ${DOCKER_IMAGE} ."
+            }
             }
         }
 
@@ -51,7 +56,9 @@ pipeline {
 
     post {
         always {
+            dir('dataengineering') {
             sh 'mvn clean'
+        }
             sh 'docker system prune -f'
         }
     }
